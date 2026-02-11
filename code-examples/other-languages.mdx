@@ -1,0 +1,300 @@
+---
+title: "Other Language Examples"
+description: "Java, Go, PHP, and LangChain integration examples"
+---
+
+# Other Language Examples
+
+## Java
+
+```java
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.URI;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+
+public class AIClient {
+    private final String apiKey;
+    private final String baseUrl;
+    private final HttpClient httpClient;
+    private final Gson gson;
+
+    public AIClient(String apiKey, String baseUrl) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl;
+        this.httpClient = HttpClient.newHttpClient();
+        this.gson = new Gson();
+    }
+
+    public String chat(String prompt, String model) throws Exception {
+        // Build request body
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("model", model);
+
+        JsonArray messages = new JsonArray();
+        JsonObject message = new JsonObject();
+        message.addProperty("role", "user");
+        message.addProperty("content", prompt);
+        messages.add(message);
+
+        requestBody.add("messages", messages);
+        requestBody.addProperty("max_tokens", 1000);
+
+        // Send request
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/v1/chat/completions"))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(requestBody)))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            JsonObject responseJson = gson.fromJson(response.body(), JsonObject.class);
+            return responseJson.getAsJsonArray("choices")
+                    .get(0).getAsJsonObject()
+                    .getAsJsonObject("message")
+                    .get("content").getAsString();
+        } else {
+            throw new RuntimeException("API call failed: " + response.statusCode() +
+                    " - " + response.body());
+        }
+    }
+
+    // Usage example
+    public static void main(String[] args) throws Exception {
+        AIClient client = new AIClient("your-api-key",
+                "https://gateway.iotex.ai");
+
+        String response = client.chat("Write a singleton pattern in Java", "gemini-2.5-flash");
+        System.out.println(response);
+    }
+}
+```
+
+## Go
+
+```go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io/ioutil"
+    "net/http"
+)
+
+type Message struct {
+    Role    string `json:"role"`
+    Content string `json:"content"`
+}
+
+type ChatRequest struct {
+    Model     string    `json:"model"`
+    Messages  []Message `json:"messages"`
+    MaxTokens int       `json:"max_tokens"`
+}
+
+type ChatResponse struct {
+    Choices []struct {
+        Message struct {
+            Role    string `json:"role"`
+            Content string `json:"content"`
+        } `json:"message"`
+    } `json:"choices"`
+}
+
+type AIClient struct {
+    APIKey  string
+    BaseURL string
+    Client  *http.Client
+}
+
+func NewAIClient(apiKey, baseURL string) *AIClient {
+    return &AIClient{
+        APIKey:  apiKey,
+        BaseURL: baseURL,
+        Client:  &http.Client{},
+    }
+}
+
+func (c *AIClient) Chat(prompt, model string) (string, error) {
+    reqBody := ChatRequest{
+        Model: model,
+        Messages: []Message{
+            {Role: "user", Content: prompt},
+        },
+        MaxTokens: 1000,
+    }
+
+    jsonData, err := json.Marshal(reqBody)
+    if err != nil {
+        return "", err
+    }
+
+    req, err := http.NewRequest("POST", c.BaseURL+"/v1/chat/completions",
+            bytes.NewBuffer(jsonData))
+    if err != nil {
+        return "", err
+    }
+
+    req.Header.Set("Authorization", "Bearer "+c.APIKey)
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := c.Client.Do(req)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        return "", err
+    }
+
+    if resp.StatusCode != 200 {
+        return "", fmt.Errorf("API call failed: %d - %s", resp.StatusCode, string(body))
+    }
+
+    var chatResp ChatResponse
+    err = json.Unmarshal(body, &chatResp)
+    if err != nil {
+        return "", err
+    }
+
+    return chatResp.Choices[0].Message.Content, nil
+}
+
+func main() {
+    client := NewAIClient("your-api-key", "https://gateway.iotex.ai")
+
+    response, err := client.Chat("Write an HTTP server in Go language", "gemini-2.5-flash")
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println(response)
+}
+```
+
+## PHP
+
+```php
+<?php
+class AIClient {
+    private $apiKey;
+    private $baseUrl;
+
+    public function __construct($apiKey, $baseUrl = 'https://gateway.iotex.ai') {
+        $this->apiKey = $apiKey;
+        $this->baseUrl = $baseUrl;
+    }
+
+    public function chat($prompt, $model = 'gemini-2.5-flash', $maxTokens = 1000) {
+        $data = [
+            'model' => $model,
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt]
+            ],
+            'max_tokens' => $maxTokens
+        ];
+
+        $headers = [
+            'Authorization: Bearer ' . $this->apiKey,
+            'Content-Type: application/json'
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->baseUrl . '/v1/chat/completions');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            throw new Exception("API call failed: $httpCode - $response");
+        }
+
+        $result = json_decode($response, true);
+        return $result['choices'][0]['message']['content'];
+    }
+
+    public function getModels() {
+        $headers = [
+            'Authorization: Bearer ' . $this->apiKey
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->baseUrl . '/v1/models');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        return json_decode($response, true);
+    }
+}
+
+// Usage example
+try {
+    $client = new AIClient('your-api-key');
+
+    // Get available models
+    $models = $client->getModels();
+    echo "Available models: " . implode(', ', array_column($models['data'], 'id')) . "\n";
+
+    // Start conversation
+    $response = $client->chat('Write a simple MVC framework structure in PHP');
+    echo $response . "\n";
+
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+}
+?>
+```
+
+## Framework Integration
+
+### LangChain Integration
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+
+# Initialize LangChain OpenAI client
+llm = ChatOpenAI(
+    model="gemini-2.5-flash",
+    openai_api_key="your-api-key",
+    openai_api_base="https://gateway.iotex.ai/v1",
+    temperature=0.7
+)
+
+# Simple call
+response = llm.invoke([HumanMessage(content="Explain what large language models are")])
+print(response.content)
+
+# System prompt + user message
+messages = [
+    SystemMessage(content="You are a professional technical documentation writer"),
+    HumanMessage(content="Write an API documentation template")
+]
+response = llm.invoke(messages)
+print(response.content)
+```
+
+<Note>
+Full code examples for Java, Go, and PHP include proper error handling, request building, and response parsing.
+</Note>

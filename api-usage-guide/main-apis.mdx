@@ -1,0 +1,99 @@
+---
+title: "Main APIs"
+description: "Chat Completions and Models API reference"
+---
+
+# Main APIs
+
+## 1. Chat Completions
+
+Interact with AI models for single-turn and multi-turn conversations.
+
+**Endpoint**: `POST /v1/chat/completions`
+
+**Key Parameters**:
+
+| Parameter     | Type    | Required | Description                                 |
+| ------------- | ------- | -------- | ------------------------------------------- |
+| `model`       | string  | Yes      | Model name, e.g. `gemini-2.5-flash`, `deepseek-ai/DeepSeek-V3-0324` |
+| `messages`    | array   | Yes      | List of conversation messages               |
+| `max_tokens`  | number  | No       | Maximum response length, default 1024       |
+| `temperature` | number  | No       | Creativity control, 0-2, default 1          |
+| `stream`      | boolean | No       | Whether to stream response, default false   |
+
+**Message Format**:
+
+```json
+{
+  "role": "user|assistant|system",
+  "content": "Message content"
+}
+```
+
+**Complete Request Example**:
+
+```json
+{
+  "model": "gemini-2.5-flash",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant"},
+    {"role": "user", "content": "Write a Python bubble sort algorithm"}
+  ],
+  "max_tokens": 500,
+  "temperature": 0.7
+}
+```
+
+**Response Format**:
+
+```json
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677858242,
+  "model": "gemini-2.5-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Here's the AI response content..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 20,
+    "completion_tokens": 100,
+    "total_tokens": 120
+  }
+}
+```
+
+## 2. List Available Models
+
+View the list of currently available AI models.
+
+**Endpoint**: `GET /v1/models`
+
+**Response Example**:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gemini-2.5-flash",
+      "object": "model",
+      "created": 1677858242,
+      "owned_by": "openai"
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V3-0324-20240229",
+      "object": "model",
+      "created": 1677858242,
+      "owned_by": "anthropic"
+    }
+  ]
+}
+```

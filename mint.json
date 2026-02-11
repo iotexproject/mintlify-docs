@@ -1,0 +1,90 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "IoTeX AI Gateway",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#0D9373",
+    "light": "#07C983",
+    "dark": "#0D9373",
+    "anchors": {
+      "from": "#0D9373",
+      "to": "#07C983"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Gateway Console",
+      "url": "https://gateway.iotex.ai/console/token"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get API Key",
+    "url": "https://gateway.iotex.ai/console/token"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-usage-guide"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Overview",
+      "pages": [
+        "overview/what-is-iotex-ai-gateway",
+        "overview/why-choose-iotex-ai-gateway",
+        "overview/supported-ai-models"
+      ]
+    },
+    {
+      "group": "Quick Start",
+      "pages": [
+        "quick-start/get-started-in-3-steps",
+        "quick-start/next-steps"
+      ]
+    },
+    {
+      "group": "API Usage Guide",
+      "pages": [
+        "api-usage-guide/basic-information",
+        "api-usage-guide/authentication",
+        "api-usage-guide/main-apis"
+      ]
+    },
+    {
+      "group": "Code Examples",
+      "pages": [
+        "code-examples/javascript-nodejs",
+        "code-examples/python",
+        "code-examples/other-languages"
+      ]
+    },
+    {
+      "group": "Advanced Usage",
+      "pages": [
+        "advanced-usage/concurrent-request-optimization",
+        "advanced-usage/smart-conversation-management",
+        "advanced-usage/cost-optimization-strategies",
+        "advanced-usage/error-handling-and-retry-mechanisms",
+        "advanced-usage/prompt-engineering",
+        "advanced-usage/streaming-response-handling"
+      ]
+    },
+    {
+      "group": "FAQ",
+      "pages": [
+        "faq/api-usage",
+        "faq/model-selection",
+        "faq/error-handling"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "x": "https://x.com/iotex_io",
+    "github": "https://github.com/iotexproject"
+  }
+}

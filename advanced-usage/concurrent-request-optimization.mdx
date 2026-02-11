@@ -1,0 +1,336 @@
+---
+title: "Concurrent Request Optimization"
+description: "Handle multiple API requests simultaneously with async batch processing and rate limiting"
+---
+
+# Concurrent Request Optimization
+
+Concurrent processing allows you to handle multiple API requests simultaneously, significantly improving performance when dealing with batch operations or multiple independent queries.
+
+## Asynchronous Batch Requests
+
+```python
+import asyncio
+import aiohttp
+import json
+import time
+
+class AsyncAIClient:
+    def __init__(self, api_key, base_url, max_concurrent=5):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def chat_single(self, session, prompt, model="gemini-2.5-flash"):
+        """Single asynchronous request"""
+        async with self.semaphore:  # Control concurrency
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1000
+            }
+            
+            async with session.post(
+                f"{self.base_url}/v1/chat/completions",
+                headers=headers,
+                json=data
+            ) as response:
+                result = await response.json()
+                return {
+                    "prompt": prompt,
+                    "response": result["choices"][0]["message"]["content"],
+                    "usage": result.get("usage", {})
+                }
+    
+    async def chat_batch(self, prompts, model="gemini-2.5-flash"):
+        """Batch asynchronous requests"""
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self.chat_single(session, prompt, model) 
+                for prompt in prompts
+            ]
+            return await asyncio.gather(*tasks)
+
+# Usage example
+async def main():
+    client = AsyncAIClient("your-api-key", "https://gateway.iotex.ai")
+    
+    prompts = [
+        "What is Python?",
+        "What is JavaScript?", 
+        "What is Go language?",
+        "What is Rust?",
+        "What is Java?"
+    ]
+    
+    start_time = time.time()
+    results = await client.chat_batch(prompts)
+    end_time = time.time()
+    
+    print(f"Processed {len(prompts)} requests in {end_time - start_time:.2f} seconds")
+    
+    for result in results:
+        print(f"Question: {result['prompt']}")
+        print(f"Answer: {result['response'][:100]}...")
+        print(f"Token usage: {result['usage']}")
+        print("-" * 50)
+
+# Run async task
+asyncio.run(main())
+```
+
+## Advanced Concurrent Processing
+
+### Rate-Limited Concurrent Client
+
+```python
+import asyncio
+import aiohttp
+import time
+from datetime import datetime, timedelta
+from collections import deque
+
+class RateLimitedAsyncClient:
+    def __init__(self, api_key, base_url, requests_per_minute=60):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.requests_per_minute = requests_per_minute
+        self.request_times = deque()
+        self.rate_limit_lock = asyncio.Lock()
+    
+    async def _check_rate_limit(self):
+        """Ensure we don't exceed rate limits"""
+        async with self.rate_limit_lock:
+            now = datetime.now()
+            
+            # Remove old requests outside the time window
+            while self.request_times and self.request_times[0] < now - timedelta(minutes=1):
+                self.request_times.popleft()
+            
+            # If we're at the limit, wait
+            if len(self.request_times) >= self.requests_per_minute:
+                sleep_time = 60 - (now - self.request_times[0]).total_seconds()
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+                    # Remove the old request after waiting
+                    self.request_times.popleft()
+            
+            # Record this request
+            self.request_times.append(now)
+    
+    async def chat_with_rate_limit(self, session, prompt, model="gemini-2.5-flash"):
+        """Make a rate-limited API request"""
+        await self._check_rate_limit()
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1000
+        }
+        
+        try:
+            async with session.post(
+                f"{self.base_url}/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=30
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return {
+                        "prompt": prompt,
+                        "response": result["choices"][0]["message"]["content"],
+                        "success": True,
+                        "usage": result.get("usage", {})
+                    }
+                else:
+                    return {
+                        "prompt": prompt,
+                        "error": f"HTTP {response.status}",
+                        "success": False
+                    }
+        except Exception as e:
+            return {
+                "prompt": prompt,
+                "error": str(e),
+                "success": False
+            }
+```
+
+### Batch Processing with Progress Tracking
+
+```python
+import asyncio
+from typing import List, Callable, Optional
+
+class BatchProcessor:
+    def __init__(self, client: AsyncAIClient, batch_size=10, delay_between_batches=1.0):
+        self.client = client
+        self.batch_size = batch_size
+        self.delay_between_batches = delay_between_batches
+    
+    async def process_batches(
+        self, 
+        prompts: List[str], 
+        model="gemini-2.5-flash",
+        progress_callback: Optional[Callable] = None
+    ):
+        """Process prompts in batches with progress tracking"""
+        results = []
+        total_batches = (len(prompts) + self.batch_size - 1) // self.batch_size
+        
+        for i in range(0, len(prompts), self.batch_size):
+            batch_prompts = prompts[i:i + self.batch_size]
+            current_batch = i // self.batch_size + 1
+            
+            if progress_callback:
+                progress_callback(current_batch, total_batches, len(batch_prompts))
+            
+            # Process current batch
+            batch_results = await self.client.chat_batch(batch_prompts, model)
+            results.extend(batch_results)
+            
+            # Delay between batches to avoid overwhelming the API
+            if current_batch < total_batches:
+                await asyncio.sleep(self.delay_between_batches)
+        
+        return results
+
+# Usage example with progress tracking
+def progress_callback(current_batch, total_batches, batch_size):
+    print(f"Processing batch {current_batch}/{total_batches} ({batch_size} requests)")
+
+async def process_large_dataset():
+    client = AsyncAIClient("your-api-key", "https://gateway.iotex.ai", max_concurrent=3)
+    processor = BatchProcessor(client, batch_size=5, delay_between_batches=2.0)
+    
+    # Large dataset of prompts
+    prompts = [f"Explain concept #{i} in simple terms" for i in range(50)]
+    
+    results = await processor.process_batches(
+        prompts, 
+        model="gemini-2.5-flash",
+        progress_callback=progress_callback
+    )
+    
+    # Process results
+    successful = [r for r in results if r.get('response')]
+    failed = [r for r in results if not r.get('response')]
+    
+    print(f"Successful requests: {len(successful)}")
+    print(f"Failed requests: {len(failed)}")
+    
+    return results
+
+# Run the batch processor
+asyncio.run(process_large_dataset())
+```
+
+## Performance Optimization Strategies
+
+### Connection Pooling and Session Reuse
+
+```python
+class OptimizedAsyncClient:
+    def __init__(self, api_key, base_url, max_connections=100):
+        self.api_key = api_key
+        self.base_url = base_url
+        
+        # Configure connection pooling
+        connector = aiohttp.TCPConnector(
+            limit=max_connections,
+            limit_per_host=20,
+            ttl_dns_cache=300,
+            use_dns_cache=True,
+        )
+        
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers={"Authorization": f"Bearer {self.api_key}"}
+        )
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.session.close()
+    
+    async def chat_optimized(self, prompt, model="gemini-2.5-flash"):
+        """Optimized API call with connection reuse"""
+        data = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1000
+        }
+        
+        async with self.session.post(
+            f"{self.base_url}/v1/chat/completions",
+            json=data
+        ) as response:
+            result = await response.json()
+            return result["choices"][0]["message"]["content"]
+
+# Usage with context manager
+async def optimized_processing():
+    async with OptimizedAsyncClient("your-api-key", "https://gateway.iotex.ai") as client:
+        tasks = [
+            client.chat_optimized(f"Question {i}")
+            for i in range(20)
+        ]
+        results = await asyncio.gather(*tasks)
+        return results
+```
+
+## Error Handling in Concurrent Requests
+
+```python
+async def resilient_batch_processing(prompts, max_retries=3):
+    """Batch processing with comprehensive error handling"""
+    
+    async def process_with_retry(client, prompt, attempt=1):
+        try:
+            return await client.chat_single(None, prompt)
+        except Exception as e:
+            if attempt < max_retries:
+                wait_time = 2 ** (attempt - 1)  # Exponential backoff
+                await asyncio.sleep(wait_time)
+                return await process_with_retry(client, prompt, attempt + 1)
+            else:
+                return {
+                    "prompt": prompt,
+                    "error": str(e),
+                    "success": False,
+                    "attempts": attempt
+                }
+    
+    client = AsyncAIClient("your-api-key", "https://gateway.iotex.ai")
+    
+    # Process all prompts with retry logic
+    tasks = [process_with_retry(client, prompt) for prompt in prompts]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    return results
+```
+
+## Best Practices for Concurrent Processing
+
+1. **Rate Limiting**: Respect API rate limits to avoid throttling
+2. **Connection Pooling**: Reuse HTTP connections for better performance
+3. **Error Handling**: Implement robust retry mechanisms with exponential backoff
+4. **Memory Management**: Monitor memory usage with large batch operations
+5. **Progress Tracking**: Provide feedback for long-running batch operations
+6. **Graceful Shutdown**: Properly close connections and handle interruptions
+7. **Resource Limits**: Use semaphores to control maximum concurrent requests

@@ -1,0 +1,203 @@
+---
+title: "Smart Conversation Management"
+description: "Manage multi-turn conversations, context windows, and conversation history"
+---
+
+# Smart Conversation Management
+
+Effective conversation management is crucial for maintaining context, optimizing token usage, and providing seamless multi-turn interactions with AI models.
+
+## Conversation History Management
+
+```python
+from openai import OpenAI
+
+class ConversationManager:
+    def __init__(self, api_key, base_url, system_prompt=None):
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.messages = []
+        
+        if system_prompt:
+            self.messages.append({
+                "role": "system", 
+                "content": system_prompt
+            })
+    
+    def add_user_message(self, content):
+        """Add user message"""
+        self.messages.append({
+            "role": "user",
+            "content": content
+        })
+    
+    def get_ai_response(self, model="gemini-2.5-flash", **kwargs):
+        """Get AI response and add to conversation history"""
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=self.messages,
+            **kwargs
+        )
+        
+        ai_message = response.choices[0].message.content
+        self.messages.append({
+            "role": "assistant",
+            "content": ai_message
+        })
+        
+        return ai_message
+    
+    def clear_history(self, keep_system=True):
+        """Clear conversation history"""
+        if keep_system and self.messages and self.messages[0]["role"] == "system":
+            self.messages = [self.messages[0]]
+        else:
+            self.messages = []
+    
+    def get_token_count(self):
+        """Estimate token usage"""
+        total_chars = sum(len(msg["content"]) for msg in self.messages)
+        return total_chars // 4  # Rough estimate, 1 token ≈ 4 characters
+
+# Usage example
+conv = ConversationManager(
+    api_key="your-api-key",
+    base_url="https://gateway.iotex.ai/v1",
+    system_prompt="You are a Python programming assistant"
+)
+
+# Multi-turn conversation
+conv.add_user_message("How to read CSV files?")
+response1 = conv.get_ai_response()
+print(f"AI: {response1}")
+
+conv.add_user_message("What if the CSV file is very large?")
+response2 = conv.get_ai_response()
+print(f"AI: {response2}")
+
+print(f"Current estimated token usage: {conv.get_token_count()}")
+```
+
+## Context Window Management
+
+```python
+def manage_context_window(messages, max_tokens=4000):
+    """
+    Intelligently manage conversation context to ensure it doesn't exceed model limits
+    """
+    def estimate_tokens(text):
+        # Simple estimation: 1 token ≈ 4 characters (Chinese) or 0.75 words (English)
+        return len(text) // 3
+    
+    total_tokens = sum(estimate_tokens(msg["content"]) for msg in messages)
+    
+    if total_tokens <= max_tokens:
+        return messages
+    
+    # Preserve system messages and recent conversations
+    result = []
+    current_tokens = 0
+    
+    # First preserve system messages
+    if messages and messages[0]["role"] == "system":
+        result.append(messages[0])
+        current_tokens += estimate_tokens(messages[0]["content"])
+        messages = messages[1:]
+    
+    # Preserve from the latest messages backward
+    for msg in reversed(messages):
+        msg_tokens = estimate_tokens(msg["content"])
+        if current_tokens + msg_tokens > max_tokens:
+            break
+        result.insert(-1 if result and result[0]["role"] == "system" else 0, msg)
+        current_tokens += msg_tokens
+    
+    return result
+
+# Usage example
+long_conversation = [
+    {"role": "system", "content": "You are a programming assistant"},
+    {"role": "user", "content": "What is Python?" * 100},  # Very long message
+    {"role": "assistant", "content": "Python is..." * 100},
+    {"role": "user", "content": "How to learn Python?"},
+    {"role": "assistant", "content": "Steps to learn Python..."}
+]
+
+optimized_messages = manage_context_window(long_conversation, max_tokens=1000)
+print(f"Original message count: {len(long_conversation)}")
+print(f"Optimized message count: {len(optimized_messages)}")
+```
+
+## Advanced Conversation Features
+
+### Message Filtering and Summarization
+
+```python
+class AdvancedConversationManager(ConversationManager):
+    def __init__(self, api_key, base_url, system_prompt=None, max_history=20):
+        super().__init__(api_key, base_url, system_prompt)
+        self.max_history = max_history
+        self.full_history = []  # Keep complete history for analysis
+    
+    def add_user_message(self, content):
+        """Add user message with history management"""
+        message = {"role": "user", "content": content, "timestamp": time.time()}
+        self.messages.append(message)
+        self.full_history.append(message)
+        
+        # Manage message count
+        if len(self.messages) > self.max_history:
+            self.trim_history()
+    
+    def trim_history(self):
+        """Intelligent history trimming"""
+        # Always keep system message if it exists
+        system_msg = None
+        if self.messages and self.messages[0]["role"] == "system":
+            system_msg = self.messages[0]
+            messages = self.messages[1:]
+        else:
+            messages = self.messages
+        
+        # Keep most recent messages
+        recent_messages = messages[-(self.max_history-1):] if system_msg else messages[-self.max_history:]
+        
+        # Rebuild messages list
+        self.messages = [system_msg] + recent_messages if system_msg else recent_messages
+    
+    def get_conversation_summary(self):
+        """Generate conversation summary for long dialogues"""
+        if len(self.full_history) < 5:
+            return "Conversation too short to summarize"
+        
+        summary_prompt = f"""
+        Summarize the following conversation in 2-3 sentences, highlighting key topics and conclusions:
+        
+        {self._format_history_for_summary()}
+        """
+        
+        response = self.client.chat.completions.create(
+            model="gemini-2.5-flash",
+            messages=[{"role": "user", "content": summary_prompt}],
+            max_tokens=200
+        )
+        
+        return response.choices[0].message.content
+    
+    def _format_history_for_summary(self):
+        """Format conversation history for summarization"""
+        formatted = []
+        for msg in self.full_history[-20:]:  # Last 20 messages
+            role = msg["role"].capitalize()
+            content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
+            formatted.append(f"{role}: {content}")
+        return "\n".join(formatted)
+```
+
+## Best Practices
+
+1. **System Prompts**: Always use clear, specific system prompts to set context and behavior
+2. **Token Management**: Monitor and manage token usage to avoid hitting model limits
+3. **History Preservation**: Keep important context while trimming less relevant messages
+4. **Error Recovery**: Implement fallback strategies when conversations exceed limits
+5. **State Persistence**: Consider saving conversation state for session recovery
+6. **Memory Optimization**: Use efficient data structures for large conversation histories

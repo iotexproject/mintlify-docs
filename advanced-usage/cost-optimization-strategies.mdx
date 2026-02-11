@@ -1,0 +1,652 @@
+---
+title: "Cost Optimization Strategies"
+description: "Reduce API costs with intelligent caching, token management, and prompt optimization"
+---
+
+# Cost Optimization Strategies
+
+Optimizing API usage costs while maintaining performance and quality is crucial for scalable AI applications. This guide provides comprehensive strategies for reducing costs through intelligent caching, efficient request patterns, and smart resource management.
+
+## Smart Caching System
+
+```python
+import hashlib
+import json
+import time
+from typing import Optional, Dict, Any
+from openai import OpenAI
+
+class AIResponseCache:
+    def __init__(self, ttl_seconds=3600):
+        self.cache = {}
+        self.ttl = ttl_seconds
+    
+    def _generate_key(self, model, messages, **params):
+        """Generate cache key"""
+        # Create standardized request representation
+        cache_data = {
+            "model": model,
+            "messages": messages,
+            "params": {k: v for k, v in params.items() 
+                     if k not in ['stream', 'user']}  # Exclude parameters that don't affect results
+        }
+        
+        cache_str = json.dumps(cache_data, sort_keys=True, ensure_ascii=False)
+        return hashlib.md5(cache_str.encode()).hexdigest()
+    
+    def get(self, model, messages, **params) -> Optional[Dict[Any, Any]]:
+        """Get cached response"""
+        key = self._generate_key(model, messages, **params)
+        
+        if key in self.cache:
+            cached_data, timestamp = self.cache[key]
+            
+            # Check if expired
+            if time.time() - timestamp < self.ttl:
+                print("✅ Cache hit")
+                return cached_data
+            else:
+                # Clean expired cache
+                del self.cache[key]
+        
+        return None
+    
+    def set(self, model, messages, response, **params):
+        """Cache response"""
+        key = self._generate_key(model, messages, **params)
+        self.cache[key] = (response, time.time())
+    
+    def clear_expired(self):
+        """Clean expired cache"""
+        current_time = time.time()
+        expired_keys = [
+            key for key, (_, timestamp) in self.cache.items()
+            if current_time - timestamp >= self.ttl
+        ]
+        
+        for key in expired_keys:
+            del self.cache[key]
+        
+        return len(expired_keys)
+    
+    def get_stats(self):
+        """Get cache statistics"""
+        return {
+            "total_entries": len(self.cache),
+            "memory_usage_kb": len(str(self.cache)) / 1024,
+            "oldest_entry_age": min([time.time() - ts for _, ts in self.cache.values()], default=0)
+        }
+
+# AI Client with integrated cache
+class CachedAIClient:
+    def __init__(self, api_key, base_url):
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.cache = AIResponseCache(ttl_seconds=1800)  # 30-minute cache
+        self.stats = {"cache_hits": 0, "cache_misses": 0, "total_savings": 0}
+    
+    def chat(self, model, messages, use_cache=True, **kwargs):
+        """Chat interface with cache"""
+        # Try to get from cache
+        if use_cache:
+            cached_response = self.cache.get(model, messages, **kwargs)
+            if cached_response:
+                self.stats["cache_hits"] += 1
+                # Estimate cost savings (approximate)
+                estimated_tokens = sum(len(msg.get("content", "")) for msg in messages) / 4
+                self.stats["total_savings"] += estimated_tokens * 0.0015  # Rough estimate
+                return cached_response
+        
+        # Call actual API
+        self.stats["cache_misses"] += 1
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        
+        # Convert to dictionary format for caching
+        response_dict = {
+            "id": response.id,
+            "choices": [{
+                "index": choice.index,
+                "message": {
+                    "role": choice.message.role,
+                    "content": choice.message.content
+                },
+                "finish_reason": choice.finish_reason
+            } for choice in response.choices],
+            "usage": {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            } if response.usage else None
+        }
+        
+        # Cache response
+        if use_cache:
+            self.cache.set(model, messages, response_dict, **kwargs)
+        
+        return response_dict
+    
+    def get_cache_stats(self):
+        """Get comprehensive cache statistics"""
+        cache_stats = self.cache.get_stats()
+        hit_rate = (self.stats["cache_hits"] / 
+                   (self.stats["cache_hits"] + self.stats["cache_misses"])) * 100
+        
+        return {
+            **cache_stats,
+            **self.stats,
+            "cache_hit_rate": f"{hit_rate:.1f}%"
+        }
+
+# Usage example
+cached_client = CachedAIClient("your-api-key", "https://gateway.iotex.ai/v1")
+
+# First call
+response1 = cached_client.chat(
+    model="gemini-2.5-flash",
+    messages=[{"role": "user", "content": "What is Python?"}]
+)
+
+# Second identical call (will hit cache)
+response2 = cached_client.chat(
+    model="gemini-2.5-flash", 
+    messages=[{"role": "user", "content": "What is Python?"}]
+)
+
+print(cached_client.get_cache_stats())
+```
+
+## Advanced Caching Strategies
+
+### Semantic Similarity Caching
+
+```python
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+class SemanticCache(AIResponseCache):
+    def __init__(self, ttl_seconds=3600, similarity_threshold=0.85):
+        super().__init__(ttl_seconds)
+        self.similarity_threshold = similarity_threshold
+        self.vectorizer = TfidfVectorizer(stop_words='english')
+        self.query_texts = []
+        self.query_vectors = None
+        
+    def _extract_query_text(self, messages):
+        """Extract main query text from messages"""
+        user_messages = [msg["content"] for msg in messages if msg["role"] == "user"]
+        return " ".join(user_messages)
+    
+    def _find_similar_query(self, query_text):
+        """Find semantically similar cached queries"""
+        if not self.query_texts:
+            return None, 0.0
+        
+        # Add current query to corpus and vectorize
+        all_texts = self.query_texts + [query_text]
+        vectors = self.vectorizer.fit_transform(all_texts)
+        
+        # Calculate similarity with last query (current one)
+        similarities = cosine_similarity(vectors[-1:], vectors[:-1]).flatten()
+        
+        if len(similarities) == 0:
+            return None, 0.0
+        
+        max_similarity_idx = np.argmax(similarities)
+        max_similarity = similarities[max_similarity_idx]
+        
+        if max_similarity >= self.similarity_threshold:
+            return max_similarity_idx, max_similarity
+        
+        return None, 0.0
+    
+    def get_semantic(self, model, messages, **params):
+        """Get cached response using semantic similarity"""
+        query_text = self._extract_query_text(messages)
+        similar_idx, similarity = self._find_similar_query(query_text)
+        
+        if similar_idx is not None:
+            # Generate key for similar query
+            similar_query_text = self.query_texts[similar_idx]
+            print(f"🔍 Found similar query (similarity: {similarity:.3f}): {similar_query_text[:50]}...")
+            
+            # Try to find cached response (this is simplified - in practice you'd need to map indices to cache keys)
+            return self.get(model, messages, **params)
+        
+        return None
+    
+    def set_semantic(self, model, messages, response, **params):
+        """Cache response with semantic indexing"""
+        query_text = self._extract_query_text(messages)
+        self.query_texts.append(query_text)
+        self.set(model, messages, response, **params)
+```
+
+### Intelligent Token Management
+
+```python
+class TokenOptimizedClient:
+    def __init__(self, api_key, base_url, target_cost_per_day=10.0):
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.target_cost_per_day = target_cost_per_day
+        self.daily_usage = {"date": time.strftime("%Y-%m-%d"), "cost": 0.0, "requests": 0}
+        
+        # Model pricing (per 1K tokens)
+        self.model_pricing = {
+            "gemini-2.5-pro": {"input": 0.03, "output": 0.06},
+            "gemini-2.5-flash": {"input": 0.0015, "output": 0.002},
+            "deepseek-ai/DeepSeek-V3-0324": {"input": 0.003, "output": 0.015}
+        }
+    
+    def _estimate_tokens(self, text):
+        """Estimate token count (rough approximation)"""
+        return len(text.split()) * 1.3  # Rough estimate
+    
+    def _calculate_cost(self, model, prompt_tokens, completion_tokens):
+        """Calculate request cost"""
+        pricing = self.model_pricing.get(model, self.model_pricing["gemini-2.5-flash"])
+        
+        prompt_cost = (prompt_tokens / 1000) * pricing["input"]
+        completion_cost = (completion_tokens / 1000) * pricing["output"]
+        
+        return prompt_cost + completion_cost
+    
+    def _check_daily_budget(self, estimated_cost):
+        """Check if request fits within daily budget"""
+        current_date = time.strftime("%Y-%m-%d")
+        
+        # Reset daily usage if new day
+        if self.daily_usage["date"] != current_date:
+            self.daily_usage = {"date": current_date, "cost": 0.0, "requests": 0}
+        
+        return (self.daily_usage["cost"] + estimated_cost) <= self.target_cost_per_day
+    
+    def _optimize_request(self, messages, model, max_tokens=None):
+        """Optimize request to reduce costs"""
+        # Estimate input tokens
+        prompt_text = " ".join([msg["content"] for msg in messages])
+        prompt_tokens = self._estimate_tokens(prompt_text)
+        
+        # Suggest model downgrade if appropriate
+        if model == "gemini-2.5-pro" and prompt_tokens < 1000:
+            suggested_model = "gemini-2.5-flash"
+            print(f"💡 Suggesting model downgrade to {suggested_model} for cost savings")
+        else:
+            suggested_model = model
+        
+        # Optimize max_tokens
+        if max_tokens is None or max_tokens > 500:
+            if prompt_tokens < 200:
+                suggested_max_tokens = 300
+            else:
+                suggested_max_tokens = min(max_tokens or 1000, 500)
+            
+            if suggested_max_tokens != max_tokens:
+                print(f"💡 Optimizing max_tokens to {suggested_max_tokens}")
+        else:
+            suggested_max_tokens = max_tokens
+        
+        return suggested_model, suggested_max_tokens
+    
+    def cost_aware_chat(self, messages, model="gemini-2.5-flash", max_tokens=None, auto_optimize=True):
+        """Chat with cost awareness and optimization"""
+        
+        if auto_optimize:
+            model, max_tokens = self._optimize_request(messages, model, max_tokens)
+        
+        # Estimate cost
+        prompt_text = " ".join([msg["content"] for msg in messages])
+        prompt_tokens = self._estimate_tokens(prompt_text)
+        estimated_completion_tokens = max_tokens or 300
+        estimated_cost = self._calculate_cost(model, prompt_tokens, estimated_completion_tokens)
+        
+        # Check budget
+        if not self._check_daily_budget(estimated_cost):
+            raise Exception(f"Request would exceed daily budget of ${self.target_cost_per_day}")
+        
+        # Make request
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens
+        )
+        
+        # Track actual usage
+        if response.usage:
+            actual_cost = self._calculate_cost(
+                model, 
+                response.usage.prompt_tokens, 
+                response.usage.completion_tokens
+            )
+            
+            self.daily_usage["cost"] += actual_cost
+            self.daily_usage["requests"] += 1
+            
+            print(f"💰 Cost: ${actual_cost:.4f} | Daily total: ${self.daily_usage['cost']:.4f}")
+        
+        return response
+    
+    def get_cost_summary(self):
+        """Get cost usage summary"""
+        remaining_budget = self.target_cost_per_day - self.daily_usage["cost"]
+        
+        return {
+            "daily_budget": self.target_cost_per_day,
+            "used_today": self.daily_usage["cost"],
+            "remaining_budget": remaining_budget,
+            "requests_today": self.daily_usage["requests"],
+            "average_cost_per_request": (self.daily_usage["cost"] / max(self.daily_usage["requests"], 1))
+        }
+```
+
+## Prompt Optimization for Cost Efficiency
+
+### Prompt Compression Techniques
+
+```python
+class PromptOptimizer:
+    def __init__(self):
+        self.common_abbreviations = {
+            "please": "pls",
+            "you": "u",
+            "your": "ur", 
+            "because": "bc",
+            "example": "ex",
+            "examples": "exs",
+            "function": "func",
+            "parameter": "param",
+            "parameters": "params",
+            "documentation": "docs",
+            "implementation": "impl"
+        }
+    
+    def compress_prompt(self, prompt, aggressive=False):
+        """Compress prompt to reduce token usage"""
+        compressed = prompt
+        
+        # Remove unnecessary whitespace
+        compressed = ' '.join(compressed.split())
+        
+        # Remove redundant phrases
+        redundant_phrases = [
+            "please note that",
+            "it's important to",
+            "you should know that",
+            "keep in mind that",
+            "remember that"
+        ]
+        
+        for phrase in redundant_phrases:
+            compressed = compressed.replace(phrase, "")
+        
+        if aggressive:
+            # Use abbreviations
+            for full, abbrev in self.common_abbreviations.items():
+                compressed = compressed.replace(full, abbrev)
+            
+            # Remove articles in some contexts
+            compressed = compressed.replace(" the ", " ").replace(" a ", " ").replace(" an ", " ")
+        
+        # Clean up extra spaces
+        compressed = ' '.join(compressed.split())
+        
+        return compressed
+    
+    def optimize_conversation_history(self, messages, max_tokens=2000):
+        """Optimize conversation history to fit token limits"""
+        def estimate_tokens(text):
+            return len(text) / 4  # Rough estimate
+        
+        total_tokens = sum(estimate_tokens(msg["content"]) for msg in messages)
+        
+        if total_tokens <= max_tokens:
+            return messages
+        
+        # Keep system message and recent messages
+        optimized = []
+        current_tokens = 0
+        
+        # Preserve system message
+        if messages and messages[0]["role"] == "system":
+            optimized.append(messages[0])
+            current_tokens += estimate_tokens(messages[0]["content"])
+            messages = messages[1:]
+        
+        # Add recent messages until we hit the limit
+        for msg in reversed(messages):
+            msg_tokens = estimate_tokens(msg["content"])
+            if current_tokens + msg_tokens > max_tokens:
+                break
+            
+            # Compress message content
+            compressed_content = self.compress_prompt(msg["content"])
+            compressed_msg = {**msg, "content": compressed_content}
+            
+            optimized.insert(-1 if optimized and optimized[0]["role"] == "system" else 0, compressed_msg)
+            current_tokens += estimate_tokens(compressed_content)
+        
+        return optimized
+```
+
+### Batching and Bulk Operations
+
+```python
+class BatchOptimizer:
+    def __init__(self, client):
+        self.client = client
+        
+    def batch_similar_requests(self, requests, similarity_threshold=0.8):
+        """Group similar requests for batch processing"""
+        if not requests:
+            return []
+        
+        groups = []
+        used = set()
+        
+        for i, req1 in enumerate(requests):
+            if i in used:
+                continue
+                
+            group = [req1]
+            used.add(i)
+            
+            for j, req2 in enumerate(requests[i+1:], i+1):
+                if j in used:
+                    continue
+                
+                # Simple similarity check (can be enhanced with semantic similarity)
+                similarity = self._calculate_similarity(req1["prompt"], req2["prompt"])
+                
+                if similarity >= similarity_threshold:
+                    group.append(req2)
+                    used.add(j)
+            
+            groups.append(group)
+        
+        return groups
+    
+    def _calculate_similarity(self, text1, text2):
+        """Simple text similarity calculation"""
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+        
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
+    
+    def create_batch_prompt(self, similar_requests):
+        """Create a single prompt for multiple similar requests"""
+        if len(similar_requests) == 1:
+            return similar_requests[0]["prompt"]
+        
+        base_pattern = self._extract_pattern(similar_requests)
+        
+        batch_prompt = f"{base_pattern}\n\nProcess the following items:\n"
+        
+        for i, req in enumerate(similar_requests, 1):
+            specific_part = self._extract_specific_part(req["prompt"], base_pattern)
+            batch_prompt += f"{i}. {specific_part}\n"
+        
+        batch_prompt += "\nProvide numbered responses for each item."
+        
+        return batch_prompt
+    
+    def _extract_pattern(self, requests):
+        """Extract common pattern from similar requests"""
+        # Simplified pattern extraction
+        first_prompt = requests[0]["prompt"]
+        words = first_prompt.split()
+        
+        # Find common words across all requests
+        common_words = []
+        for word in words:
+            if all(word.lower() in req["prompt"].lower() for req in requests):
+                common_words.append(word)
+        
+        return " ".join(common_words[:10])  # Take first 10 common words
+    
+    def _extract_specific_part(self, prompt, pattern):
+        """Extract the specific part that differs from the pattern"""
+        # Simple extraction - remove pattern words and return remainder
+        pattern_words = set(pattern.lower().split())
+        prompt_words = prompt.split()
+        
+        specific_words = [word for word in prompt_words 
+                         if word.lower() not in pattern_words]
+        
+        return " ".join(specific_words)
+```
+
+## Cost Monitoring and Analytics
+
+```python
+import sqlite3
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+
+class CostAnalytics:
+    def __init__(self, db_path="ai_costs.db"):
+        self.db_path = db_path
+        self._init_database()
+    
+    def _init_database(self):
+        """Initialize SQLite database for cost tracking"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME,
+                model TEXT,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                total_tokens INTEGER,
+                cost REAL,
+                request_type TEXT,
+                user_id TEXT
+            )
+        ''')
+        conn.commit()
+        conn.close()
+    
+    def log_usage(self, model, prompt_tokens, completion_tokens, cost, request_type="chat", user_id="default"):
+        """Log API usage for cost tracking"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('''
+            INSERT INTO usage_log 
+            (timestamp, model, prompt_tokens, completion_tokens, total_tokens, cost, request_type, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            datetime.now(),
+            model,
+            prompt_tokens,
+            completion_tokens,
+            prompt_tokens + completion_tokens,
+            cost,
+            request_type,
+            user_id
+        ))
+        conn.commit()
+        conn.close()
+    
+    def get_daily_costs(self, days=30):
+        """Get daily cost breakdown"""
+        conn = sqlite3.connect(self.db_path)
+        
+        query = '''
+            SELECT DATE(timestamp) as date, SUM(cost) as daily_cost, COUNT(*) as requests
+            FROM usage_log 
+            WHERE timestamp >= datetime('now', '-{} days')
+            GROUP BY DATE(timestamp)
+            ORDER BY date
+        '''.format(days)
+        
+        cursor = conn.execute(query)
+        results = cursor.fetchall()
+        conn.close()
+        
+        return [{"date": row[0], "cost": row[1], "requests": row[2]} for row in results]
+    
+    def get_model_usage_breakdown(self):
+        """Get usage breakdown by model"""
+        conn = sqlite3.connect(self.db_path)
+        
+        query = '''
+            SELECT model, 
+                   SUM(cost) as total_cost,
+                   SUM(total_tokens) as total_tokens,
+                   COUNT(*) as requests,
+                   AVG(cost) as avg_cost_per_request
+            FROM usage_log 
+            GROUP BY model
+            ORDER BY total_cost DESC
+        '''
+        
+        cursor = conn.execute(query)
+        results = cursor.fetchall()
+        conn.close()
+        
+        return [{
+            "model": row[0],
+            "total_cost": row[1], 
+            "total_tokens": row[2],
+            "requests": row[3],
+            "avg_cost_per_request": row[4]
+        } for row in results]
+    
+    def generate_cost_report(self):
+        """Generate comprehensive cost report"""
+        daily_costs = self.get_daily_costs(30)
+        model_breakdown = self.get_model_usage_breakdown()
+        
+        total_cost_30_days = sum(day["cost"] for day in daily_costs)
+        total_requests_30_days = sum(day["requests"] for day in daily_costs)
+        
+        report = {
+            "period": "Last 30 days",
+            "total_cost": total_cost_30_days,
+            "total_requests": total_requests_30_days,
+            "average_cost_per_request": total_cost_30_days / max(total_requests_30_days, 1),
+            "daily_average": total_cost_30_days / 30,
+            "model_breakdown": model_breakdown,
+            "daily_costs": daily_costs
+        }
+        
+        return report
+```
+
+## Cost Optimization Best Practices
+
+1. **Implement Intelligent Caching**: Cache responses for repeated or similar queries
+2. **Use Appropriate Models**: Don't use GPT-4 for tasks that GPT-3.5-turbo can handle
+3. **Optimize Prompt Length**: Remove unnecessary words and use compression techniques
+4. **Batch Similar Requests**: Group related queries into single requests when possible
+5. **Set Token Limits**: Use appropriate max\_tokens settings to avoid over-generation
+6. **Monitor Usage Patterns**: Track costs and identify optimization opportunities
+7. **Implement Rate Limiting**: Control request frequency to manage costs
+8. **Use Streaming Wisely**: Stream for user experience, but be aware of potential increased costs
+9. **Leverage Model-Specific Features**: Use each model's strengths efficiently
+10. **Implement Budget Controls**: Set daily/monthly limits and automated alerts

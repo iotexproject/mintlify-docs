@@ -1,0 +1,378 @@
+---
+title: "Prompt Engineering"
+description: "Techniques for crafting effective prompts including templates, chain-of-thought, and few-shot learning"
+---
+
+# Prompt Engineering
+
+## Prompt Engineering Techniques
+
+Effective prompt engineering is crucial for getting optimal results from AI models. Well-structured prompts lead to more accurate, relevant, and useful responses.
+
+### Structured Prompt Templates
+
+```python
+class PromptTemplate:
+    def __init__(self):
+        self.templates = {
+            "code_review": (
+                "Please perform a professional code review for the following code:\n\n"
+                "**Code Language**: {language}\n"
+                "**Function Description**: {description}\n\n"
+                "```\n{code}\n```\n\n"
+                "Please evaluate from the following perspectives:\n"
+                "1. Code quality and readability\n"
+                "2. Performance optimization suggestions\n"
+                "3. Potential bugs and security issues\n"
+                "4. Best practice recommendations\n\n"
+                "Format the output with each aspect listed separately."
+            ),
+            "api_design": (
+                "Please design a RESTful API for {service_type}:\n\n"
+                "**Business Requirements**: {requirements}\n"
+                "**Main Features**: {features}\n\n"
+                "Please provide:\n"
+                "1. API endpoint design\n"
+                "2. Request/response formats\n"
+                "3. Error handling mechanism\n"
+                "4. Authentication and authorization scheme\n\n"
+                "Use standard REST design principles."
+            ),
+            "documentation": (
+                "Please write professional technical documentation for the following {item_type}:\n\n"
+                "**Title**: {title}\n"
+                "**Target Audience**: {audience}\n"
+                "**Core Content**: {content}\n\n"
+                "Documentation requirements:\n"
+                "1. Clear structure with distinct levels\n"
+                "2. Include practical usage examples\n"
+                "3. Cover common issues and considerations\n"
+                "4. Use Markdown format\n\n"
+                "Please ensure the documentation is practical and easy to understand."
+            )
+        }
+
+    def generate(self, template_name, **kwargs):
+        """Generate formatted prompt"""
+        if template_name not in self.templates:
+            raise ValueError(f"Unknown template: {template_name}")
+        return self.templates[template_name].format(**kwargs)
+
+
+# Usage example
+prompt_gen = PromptTemplate()
+
+# Code review prompt
+code_review_prompt = prompt_gen.generate(
+    "code_review",
+    language="Python",
+    description="User login validation function",
+    code="def validate_user(username, password):\n    if username == 'admin' and password == '123456':\n        return True\n    return False"
+)
+
+print(code_review_prompt)
+```
+
+## Advanced Prompt Strategies
+
+### Chain-of-Thought Prompting
+
+```python
+def create_chain_of_thought_prompt(problem, examples=None):
+    """Create a prompt that encourages step-by-step reasoning"""
+
+    base_prompt = """
+Let's work through this step by step.
+
+Problem: {problem}
+
+Please follow this approach:
+1. Understand the problem
+2. Break down into smaller parts
+3. Solve each part
+4. Combine the solutions
+5. Verify the answer
+
+Step-by-step solution:
+"""
+
+    if examples:
+        examples_text = "\n\nHere are some similar examples:\n"
+        for i, example in enumerate(examples, 1):
+            examples_text += f"\nExample {i}:\n{example}\n"
+        base_prompt = base_prompt.replace(
+            "Step-by-step solution:",
+            examples_text + "\nStep-by-step solution:"
+        )
+
+    return base_prompt.format(problem=problem)
+
+# Usage
+problem = "Calculate the compound interest on $1000 invested at 5% annual rate for 3 years"
+cot_prompt = create_chain_of_thought_prompt(problem)
+```
+
+### Role-Based Prompting
+
+```python
+class RoleBasedPrompts:
+    def __init__(self):
+        self.roles = {
+            "expert_programmer": (
+                "You are a senior software engineer with 15+ years of experience in {technology}. "
+                "You follow best practices, write clean code, and prioritize maintainability and performance. "
+                "Provide detailed explanations and consider edge cases in your solutions."
+            ),
+            "technical_writer": (
+                "You are a professional technical writer who specializes in creating clear, comprehensive documentation. "
+                "Your writing is precise, well-structured, and accessible to the target audience. "
+                "Always include practical examples and consider different skill levels."
+            ),
+            "security_analyst": (
+                "You are a cybersecurity expert with deep knowledge of security vulnerabilities and best practices. "
+                "Always consider security implications, potential attack vectors, and defense strategies. "
+                "Provide specific, actionable security recommendations."
+            ),
+            "code_reviewer": (
+                "You are a meticulous code reviewer who focuses on code quality, maintainability, and best practices. "
+                "Examine code for bugs, security issues, performance problems, and style violations. "
+                "Provide constructive feedback with specific improvement suggestions."
+            )
+        }
+
+    def create_role_prompt(self, role, task, context=None):
+        """Create a prompt with specific role context"""
+        if role not in self.roles:
+            raise ValueError(f"Unknown role: {role}")
+
+        role_context = self.roles[role]
+        prompt = f"{role_context}\n\nTask: {task}"
+
+        if context:
+            prompt += f"\n\nContext: {context}"
+
+        prompt += "\n\nPlease provide your response based on your expertise:"
+        return prompt
+
+# Usage
+role_prompts = RoleBasedPrompts()
+
+security_prompt = role_prompts.create_role_prompt(
+    role="security_analyst",
+    task="Review this authentication system for vulnerabilities",
+    context="Web application with JWT tokens and password-based login"
+)
+```
+
+### Few-Shot Learning Prompts
+
+```python
+class FewShotPromptBuilder:
+    def __init__(self):
+        self.examples = []
+
+    def add_example(self, input_text, output_text, explanation=None):
+        """Add an example to the few-shot prompt"""
+        example = {
+            "input": input_text,
+            "output": output_text,
+            "explanation": explanation
+        }
+        self.examples.append(example)
+
+    def build_prompt(self, task_description, new_input):
+        """Build the complete few-shot prompt"""
+        prompt = f"{task_description}\n\n"
+
+        # Add examples
+        for i, example in enumerate(self.examples, 1):
+            prompt += f"Example {i}:\n"
+            prompt += f"Input: {example['input']}\n"
+            prompt += f"Output: {example['output']}\n"
+            if example['explanation']:
+                prompt += f"Explanation: {example['explanation']}\n"
+            prompt += "\n"
+
+        # Add the new input
+        prompt += f"Now, please process this new input:\n"
+        prompt += f"Input: {new_input}\n"
+        prompt += f"Output:"
+
+        return prompt
+
+# Usage example: Text classification
+classifier = FewShotPromptBuilder()
+
+# Add training examples
+classifier.add_example(
+    "The weather is beautiful today!",
+    "Positive",
+    "Expresses happiness about weather"
+)
+
+classifier.add_example(
+    "I'm frustrated with this slow internet",
+    "Negative",
+    "Shows frustration and dissatisfaction"
+)
+
+classifier.add_example(
+    "The meeting is scheduled for 3 PM",
+    "Neutral",
+    "Factual statement without emotion"
+)
+
+# Build prompt for new classification
+classification_prompt = classifier.build_prompt(
+    "Classify the sentiment of the following text as Positive, Negative, or Neutral:",
+    "I love this new feature in the app!"
+)
+```
+
+### Context Window Management
+
+```python
+def manage_context_window(messages, max_tokens=4000):
+    """
+    Intelligently manage conversation context to ensure it doesn't exceed model limits
+    """
+    def estimate_tokens(text):
+        # Simple estimation: 1 token ~ 4 characters (Chinese) or 0.75 words (English)
+        return len(text) // 3
+
+    total_tokens = sum(estimate_tokens(msg["content"]) for msg in messages)
+
+    if total_tokens <= max_tokens:
+        return messages
+
+    # Preserve system messages and recent conversations
+    result = []
+    current_tokens = 0
+
+    # First preserve system messages
+    if messages and messages[0]["role"] == "system":
+        result.append(messages[0])
+        current_tokens += estimate_tokens(messages[0]["content"])
+        messages = messages[1:]
+
+    # Preserve from the latest messages backward
+    for msg in reversed(messages):
+        msg_tokens = estimate_tokens(msg["content"])
+        if current_tokens + msg_tokens > max_tokens:
+            break
+        result.insert(-1 if result and result[0]["role"] == "system" else 0, msg)
+        current_tokens += msg_tokens
+
+    return result
+
+# Usage example
+long_conversation = [
+    {"role": "system", "content": "You are a programming assistant"},
+    {"role": "user", "content": "What is Python?" * 100},  # Very long message
+    {"role": "assistant", "content": "Python is..." * 100},
+    {"role": "user", "content": "How to learn Python?"},
+    {"role": "assistant", "content": "Steps to learn Python..."}
+]
+
+optimized_messages = manage_context_window(long_conversation, max_tokens=1000)
+print(f"Original message count: {len(long_conversation)}")
+print(f"Optimized message count: {len(optimized_messages)}")
+```
+
+### Dynamic Prompt Optimization
+
+#### Adaptive Prompt Length
+
+```python
+class AdaptivePromptBuilder:
+    def __init__(self):
+        self.complexity_levels = {
+            "simple": {
+                "detail_level": "brief",
+                "examples": 1,
+                "max_context": 500
+            },
+            "moderate": {
+                "detail_level": "detailed",
+                "examples": 2,
+                "max_context": 1500
+            },
+            "complex": {
+                "detail_level": "comprehensive",
+                "examples": 3,
+                "max_context": 3000
+            }
+        }
+
+    def build_adaptive_prompt(self, task, complexity="moderate", context=None):
+        """Build prompt adapted to task complexity"""
+        config = self.complexity_levels.get(complexity, self.complexity_levels["moderate"])
+
+        prompt = f"Task: {task}\n\n"
+
+        # Adjust detail level
+        if config["detail_level"] == "brief":
+            prompt += "Please provide a concise solution.\n"
+        elif config["detail_level"] == "detailed":
+            prompt += "Please provide a detailed explanation with key steps.\n"
+        else:
+            prompt += "Please provide a comprehensive analysis with detailed explanations, examples, and considerations.\n"
+
+        # Add context if provided and within limits
+        if context and len(context) <= config["max_context"]:
+            prompt += f"\nContext: {context}\n"
+
+        return prompt
+
+# Usage
+adaptive_builder = AdaptivePromptBuilder()
+
+simple_prompt = adaptive_builder.build_adaptive_prompt(
+    "Sort a list of numbers",
+    complexity="simple"
+)
+
+complex_prompt = adaptive_builder.build_adaptive_prompt(
+    "Design a distributed caching system",
+    complexity="complex",
+    context="High-traffic web application with global users"
+)
+```
+
+## Best Practices for Prompt Engineering
+
+### 1. Clarity and Specificity
+
+- Use clear, specific language
+- Define the expected output format
+- Provide context and constraints
+
+### 2. Structure and Organization
+
+- Use consistent formatting
+- Break complex tasks into steps
+- Use bullet points and numbering
+
+### 3. Examples and Context
+
+- Provide relevant examples
+- Include necessary background information
+- Show desired output format
+
+### 4. Iterative Refinement
+
+- Test prompts with different inputs
+- Refine based on output quality
+- A/B test different prompt versions
+
+### 5. Token Efficiency
+
+- Balance detail with token usage
+- Remove unnecessary words
+- Use templates for repeated patterns
+
+### 6. Role and Persona
+
+- Define the AI's role clearly
+- Set appropriate expertise level
+- Maintain consistent persona throughout conversation

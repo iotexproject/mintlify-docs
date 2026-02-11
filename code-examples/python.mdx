@@ -1,0 +1,123 @@
+---
+title: "Python Examples"
+description: "Python code examples for IoTeX AI Gateway"
+---
+
+# Python Examples
+
+## Method 1: Using OpenAI SDK (Recommended)
+
+```python
+from openai import OpenAI
+
+# Initialize client
+client = OpenAI(
+    api_key="your-api-key",
+    base_url="https://gateway.iotex.ai/v1"
+)
+
+# Simple conversation
+def simple_chat(prompt):
+    response = client.chat.completions.create(
+        model="gemini-2.5-flash",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
+    )
+    return response.choices[0].message.content
+
+# Multi-turn conversation
+def multi_turn_chat():
+    messages = [
+        {"role": "system", "content": "You are a Python programming assistant"},
+        {"role": "user", "content": "How to read CSV files?"}
+    ]
+
+    response = client.chat.completions.create(
+        model="gemini-2.5-flash",
+        messages=messages,
+        temperature=0.7
+    )
+
+    # Add AI response to conversation history
+    messages.append({
+        "role": "assistant",
+        "content": response.choices[0].message.content
+    })
+
+    return messages
+
+# Streaming output
+def stream_chat(prompt):
+    stream = client.chat.completions.create(
+        model="gemini-2.5-flash",
+        messages=[{"role": "user", "content": prompt}],
+        stream=True
+    )
+
+    for chunk in stream:
+        if chunk.choices[0].delta.content is not None:
+            print(chunk.choices[0].delta.content, end="")
+
+# Usage examples
+if __name__ == "__main__":
+    # Simple call
+    result = simple_chat("Write a Python bubble sort function")
+    print(result)
+
+    # Streaming output
+    stream_chat("Explain basic concepts of machine learning")
+```
+
+## Method 2: Using requests library
+
+```python
+import requests
+import json
+
+class AIClient:
+    def __init__(self, api_key, base_url="https://gateway.iotex.ai"):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+    def chat(self, messages, model="gemini-2.5-flash", **kwargs):
+        data = {
+            "model": model,
+            "messages": messages,
+            **kwargs
+        }
+
+        response = requests.post(
+            f"{self.base_url}/v1/chat/completions",
+            headers=self.headers,
+            json=data
+        )
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"API call failed: {response.status_code} - {response.text}")
+
+    def get_models(self):
+        response = requests.get(
+            f"{self.base_url}/v1/models",
+            headers=self.headers
+        )
+        return response.json()
+
+# Usage example
+client = AIClient("your-api-key")
+
+# Get available models
+models = client.get_models()
+print("Available models:", [model['id'] for model in models['data']])
+
+# Start conversation
+response = client.chat([
+    {"role": "user", "content": "Hello, introduce yourself"}
+])
+print(response['choices'][0]['message']['content'])
+```

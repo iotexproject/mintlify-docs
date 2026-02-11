@@ -1,0 +1,60 @@
+---
+title: "Get Started in 3 Steps"
+description: "Set up your first API call in minutes"
+---
+
+# Get Started in 3 Steps
+
+## Step 1: Get Your API Key
+
+Obtain your exclusive API key in the format: `sk-xxxxxxxxxx` on [gateway.iotex.ai/console/token](https://gateway.iotex.ai/console/token)
+
+## Step 2: Make Your First API Call
+
+**Simplest method using curl**:
+
+```bash
+curl https://gateway.iotex.ai/v1/chat/completions \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-2.5-flash",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "max_tokens": 100
+  }'
+```
+
+**Python version**:
+
+```python
+import requests
+
+response = requests.post(
+    'https://gateway.iotex.ai/v1/chat/completions',
+    headers={'Authorization': 'Bearer your-api-key'},
+    json={
+        'model': 'gemini-2.5-flash',
+        'messages': [{'role': 'user', 'content': 'Hello'}]
+    }
+)
+print(response.json()['choices'][0]['message']['content'])
+```
+
+## Step 3: View the Response
+
+A successful call will return the AI's response:
+
+```json
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm an AI assistant, and I'm happy to help you. What can I do for you today?"
+      }
+    }
+  ]
+}
+```
+
+**Congratulations! You've successfully integrated IoTeX AI Gateway**
