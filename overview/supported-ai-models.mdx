@@ -5,49 +5,47 @@ description: "List of AI models available through IoTeX AI Gateway"
 
 IoTeX AI Gateway provides access to models from multiple leading AI providers. The model list is updated regularly as new models become available.
 
-## Available Models
+## Available Models (28 models)
 
-| Model | Provider |
-|-------|----------|
-| `gemini-2.5-flash` | Google |
-| `google/gemma-3-12b-it` | Google |
-| `google/gemma-3-27b-it` | Google |
-| `deepseek-ai/DeepSeek-V3-0324` | DeepSeek |
-| `deepseek-ai/DeepSeek-R1-0528` | DeepSeek |
-| `Qwen/Qwen3-30B-A3B` | Qwen |
-| `Qwen/Qwen3-235B-A22B-Instruct-2507` | Qwen |
-| `Qwen/Qwen3-Coder-480B-A35B-Instruct` | Qwen |
-| `meta-llama/Llama-3.3-70B-Instruct` | Meta |
-| `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta |
-| `mistralai/Mistral-Nemo-Instruct-2407` | Mistral |
-| `moonshotai/Kimi-K2-Instruct-0905` | Moonshot |
-| `zai-org/GLM-4.5` | Zhipu AI |
-| `openai/gpt-oss-20b` | OpenAI |
-| `openai/gpt-oss-120b` | OpenAI |
+Prices are per 1M tokens.
+
+| Model | Provider | Input | Output |
+|-------|----------|------:|-------:|
+| `black-forest-labs/FLUX-1.1-pro` | Black Forest Labs | $0.04/req | - |
+| `deepseek-ai/DeepSeek-R1-0528` | DeepSeek | $0.50 | $2.15 |
+| `deepseek-ai/DeepSeek-V3-0324` | DeepSeek | $0.27 | $0.88 |
+| `gemini-2.5-flash` | Google | $0.30 | $2.50 |
+| `gemini-2.5-flash-lite` | Google | $0.10 | $0.40 |
+| `gemini-3-flash-preview` | Google | $0.50 | $3.00 |
+| `gemini-3-pro-preview` | Google | $2.00 | $12.00 |
+| `google/gemma-3-12b-it` | Google | $0.03 | $0.10 |
+| `google/gemma-3-27b-it` | Google | $0.04 | $0.15 |
+| `meta-llama/Llama-3.3-70B-Instruct` | Meta | $0.23 | $0.40 |
+| `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta | $0.15 | $0.60 |
+| `mistralai/Mistral-Nemo-Instruct-2407` | Mistral | $0.02 | $0.04 |
+| `moonshotai/Kimi-K2-Instruct-0905` | Moonshot | $0.50 | $2.00 |
+| `gpt-4o-mini` | OpenAI | $0.15 | $0.60 |
+| `openai/gpt-3.5-turbo` | OpenAI | $0.50 | $1.50 |
+| `openai/gpt-4.1-nano` | OpenAI | $0.10 | $0.40 |
+| `openai/gpt-4o-mini` | OpenAI | $0.15 | $0.60 |
+| `openai/gpt-oss-120b` | OpenAI | $0.04 | $0.19 |
+| `openai/gpt-oss-20b` | OpenAI | $0.03 | $0.14 |
+| `openai/whisper-large-v3` | OpenAI | $15.00 | $15.00 |
+| `openai/whisper-large-v3-turbo` | OpenAI | $7.50 | $7.50 |
+| `whisper-1` | OpenAI | $30.00 | $30.00 |
+| `openrouter/sonoma-sky-alpha` | OpenRouter | Free | - |
+| `Qwen/Qwen2.5-7B-Instruct` | Qwen | $0.04 | $0.10 |
+| `Qwen/Qwen3-235B-A22B-Instruct-2507` | Qwen | $0.13 | $0.60 |
+| `Qwen/Qwen3-30B-A3B` | Qwen | $0.08 | $0.29 |
+| `Qwen/Qwen3-Coder-480B-A35B-Instruct` | Qwen | $0.40 | $1.60 |
+| `x-ai/grok-code-fast-1` | xAI | $0.20 | $1.50 |
 
 <Note>
-This list may not reflect the latest additions. Call the `/v1/models` endpoint for the real-time list of available models.
+This list may not reflect the latest additions. Call the `/v1/models` endpoint for the most up-to-date list.
 </Note>
 
 ## Query Models Programmatically
 
 ```bash
-curl https://gateway.iotex.ai/v1/models \
-  -H "Authorization: Bearer your-api-key"
-```
-
-The response includes model metadata:
-
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "id": "gemini-2.5-flash",
-      "object": "model",
-      "created": 1677858242,
-      "owned_by": "google"
-    }
-  ]
-}
+curl https://gateway.iotex.ai/v1/models
 ```
