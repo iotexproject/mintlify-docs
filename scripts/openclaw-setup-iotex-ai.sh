@@ -19,12 +19,6 @@ set -euo pipefail
 LLM_MODELS=(
   "gemini-2.5-flash-lite|Gemini 2.5 Flash Lite|Google|\$0.10/\$0.40 per 1M tokens"
   "gemini-2.5-flash|Gemini 2.5 Flash|Google|\$0.30/\$2.50 per 1M tokens"
-  "gemini-3-flash-preview|Gemini 3 Flash Preview|Google|\$0.50/\$3.00 per 1M tokens"
-  "deepseek-ai/DeepSeek-V3-0324|DeepSeek V3|DeepSeek|\$0.27/\$0.88 per 1M tokens"
-  "deepseek-ai/DeepSeek-R1-0528|DeepSeek R1 (reasoning)|DeepSeek|\$0.50/\$2.15 per 1M tokens"
-  "Qwen/Qwen3-30B-A3B|Qwen3 30B|Qwen|\$0.08/\$0.29 per 1M tokens"
-  "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8|Llama 4 Maverick|Meta|\$0.15/\$0.60 per 1M tokens"
-  "gpt-4o-mini|GPT-4o Mini|OpenAI|\$0.15/\$0.60 per 1M tokens"
 )
 
 AUDIO_MODELS=(
@@ -150,17 +144,6 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
-# ── Build model alias from ID ────────────────────────────────────────
-make_alias() {
-  local id="$1"
-  local base="${id##*/}"
-  base=$(echo "$base" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-  base=$(echo "$base" | sed 's/instruct.*//;s/-fp[0-9]*//;s/-0[0-9]*$//;s/-large-v3-turbo//' | sed 's/-$//')
-  echo "$base"
-}
-
-LLM_ALIAS=$(make_alias "$LLM_MODEL")
-
 # ── Apply config (deep merge via node) ───────────────────────────────
 echo ""
 echo "==> Updating openclaw.json..."
@@ -170,36 +153,42 @@ const fs = require("fs");
 const configPath = process.argv[1];
 const apiKey     = process.argv[2];
 const llmModel   = process.argv[3];
-const llmAlias   = process.argv[4];
-const audioModel = process.argv[5];
-const setDefault = process.argv[6] === "true";
+const audioModel = process.argv[4];
+const setDefault = process.argv[5] === "true";
 
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
-// 1. Add iotex provider (preserves other providers)
+// All available IoTeX LLM models
+const allModels = [
+  { id: "gemini-2.5-flash-lite", reasoning: false, contextWindow: 200000, maxTokens: 8192 },
+  { id: "gemini-2.5-flash", reasoning: false, contextWindow: 200000, maxTokens: 8192 },
+];
+
+// 1. Add iotex provider with all models (preserves other providers)
 config.models = config.models || {};
 config.models.providers = config.models.providers || {};
 config.models.providers.iotex = {
   baseUrl: "https://gateway.iotex.ai/v1",
   apiKey: apiKey,
   api: "openai-completions",
-  models: [
-    {
-      id: llmModel,
-      reasoning: false,
-      input: ["text"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 200000,
-      maxTokens: 8192
-    }
-  ]
+  models: allModels.map(m => ({
+    ...m,
+    name: m.id + " (via IoTeX)",
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  }))
 };
 
-// 2. Add model alias (preserves other aliases)
+// 2. Register all models so they appear in /models list
 config.agents = config.agents || {};
 config.agents.defaults = config.agents.defaults || {};
 config.agents.defaults.models = config.agents.defaults.models || {};
-config.agents.defaults.models["iotex/" + llmModel] = { alias: llmAlias };
+for (const m of allModels) {
+  const key = "iotex/" + m.id;
+  if (!config.agents.defaults.models[key]) {
+    config.agents.defaults.models[key] = {};
+  }
+}
 
 // 3. Set as default model (only if requested)
 if (setDefault) {
@@ -238,7 +227,7 @@ if (idx >= 0) {
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
-' "$CONFIG" "$API_KEY" "$LLM_MODEL" "$LLM_ALIAS" "$AUDIO_MODEL" "$SET_DEFAULT"
+' "$CONFIG" "$API_KEY" "$LLM_MODEL" "$AUDIO_MODEL" "$SET_DEFAULT"
 
 # ── Set up auth profile credentials ─────────────────────────────────
 echo "==> Setting up auth profile..."
@@ -266,7 +255,7 @@ echo ""
 echo "  Done! IoTeX AI Gateway is configured."
 echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  LLM:    iotex/$LLM_MODEL (alias: $LLM_ALIAS)"
+echo "  LLM:    iotex/$LLM_MODEL"
 echo "  Audio:  $AUDIO_MODEL (auto-transcribes voice messages)"
 if [ "$SET_DEFAULT" = true ]; then
   echo "  Default model set to: iotex/$LLM_MODEL"
@@ -276,6 +265,6 @@ else
   echo "    openclaw config set agents.defaults.model.primary 'iotex/$LLM_MODEL'"
 fi
 echo ""
-echo "  Switch models in chat:  /model $LLM_ALIAS"
+echo "  Switch models in chat:  /model iotex/$LLM_MODEL"
 echo "  Verify:                 openclaw gateway health"
 echo ""
