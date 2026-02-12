@@ -5,23 +5,33 @@ description: "Connect OpenClaw AI agents to IoTeX AI Gateway for LLM and audio t
 
 [OpenClaw](https://openclaw.ai) is an open-source, self-hosted AI assistant that connects to messaging apps (Telegram, WhatsApp, Discord, Slack, etc.) and performs autonomous tasks. Connect it to IoTeX AI Gateway to use models like Gemini 2.5 Flash Lite for chat and Whisper for voice message transcription.
 
-## Quick Setup (Ask Your Agent)
+## Quick Setup
 
-If you already have OpenClaw running, just tell your agent:
+Run the setup script to add IoTeX AI Gateway as an LLM provider **and** configure voice message transcription. Get your API key from the [Gateway Console](https://gateway.iotex.ai/console/token) first.
 
-```
-Add gateway.iotex.ai as an OpenAI-compatible LLM provider with API key sk-xxxxxxxxxx.
-Use "openai-completions" as the API type and "iotex" as the provider name.
-Set the base URL to https://gateway.iotex.ai/v1.
-Add gemini-2.5-flash-lite as an available model.
-Docs: https://docs.iotex.ai/
+**Non-interactive** — uses defaults (Gemini 2.5 Flash Lite + Whisper Large V3 Turbo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iotexproject/ai-gateway-docs/main/scripts/openclaw-setup-iotex-ai.sh | bash -s -- YOUR_API_KEY
 ```
 
-Get your API key from the [Gateway Console](https://gateway.iotex.ai/console/token) first.
+**Interactive** — prompts you to pick LLM and audio models:
 
-<Warning>
-For audio transcription, **do not** rely on the agent to configure it automatically. The media understanding system requires a specific provider mapping. Follow the [Audio Transcription](#audio-transcription) section below for manual setup.
-</Warning>
+```bash
+curl -fsSL https://raw.githubusercontent.com/iotexproject/ai-gateway-docs/main/scripts/openclaw-setup-iotex-ai.sh | bash
+```
+
+**Full control** — specify model, audio model, and set as default:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iotexproject/ai-gateway-docs/main/scripts/openclaw-setup-iotex-ai.sh | bash -s -- YOUR_API_KEY gemini-2.5-flash openai/whisper-large-v3-turbo --default
+```
+
+The script configures:
+- **LLM provider**: IoTeX with your chosen model (e.g. `iotex/gemini-2.5-flash-lite`)
+- **Audio transcription**: Whisper model for automatic voice message transcription
+- **Auth profile**: API key stored securely for both LLM and audio
+- **Model alias**: Short name for easy switching in chat (e.g. `/model gemini-lite`)
 
 ## Manual Setup
 
