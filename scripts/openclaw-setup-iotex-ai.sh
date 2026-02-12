@@ -2,16 +2,16 @@
 # Setup IoTeX AI Gateway for OpenClaw
 #
 # Non-interactive (all params):
-#   curl -fsSL https://docs.iotex.ai/scripts/setup-openclaw.sh | bash -s -- API_KEY [MODEL] [AUDIO_MODEL] [--default]
+#   curl -fsSL URL | bash -s -- API_KEY [MODEL] [AUDIO_MODEL] [--default]
 #
 # Interactive:
-#   curl -fsSL https://docs.iotex.ai/scripts/setup-openclaw.sh | bash
-#   bash setup-openclaw.sh
+#   curl -fsSL URL | bash
+#   bash openclaw-setup-iotex-ai.sh
 #
 # Examples:
-#   bash setup-openclaw.sh sk-xxx                                          # defaults: gemini-2.5-flash-lite + whisper-large-v3-turbo
-#   bash setup-openclaw.sh sk-xxx gemini-2.5-flash                         # pick LLM, default audio
-#   bash setup-openclaw.sh sk-xxx gemini-2.5-flash-lite whisper-1 --default  # full non-interactive + set as default
+#   bash openclaw-setup-iotex-ai.sh sk-xxx                                          # defaults
+#   bash openclaw-setup-iotex-ai.sh sk-xxx gemini-2.5-flash                         # pick LLM
+#   bash openclaw-setup-iotex-ai.sh sk-xxx gemini-2.5-flash-lite whisper-1 --default # full
 #
 set -euo pipefail
 
@@ -138,6 +138,11 @@ if ! command -v openclaw &>/dev/null; then
   exit 1
 fi
 
+if ! command -v node &>/dev/null; then
+  echo "Error: node not found. OpenClaw requires Node.js."
+  exit 1
+fi
+
 OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
 CONFIG="$OPENCLAW_DIR/openclaw.json"
 if [ ! -f "$CONFIG" ]; then
@@ -146,99 +151,113 @@ if [ ! -f "$CONFIG" ]; then
 fi
 
 # ── Build model alias from ID ────────────────────────────────────────
-# "gemini-2.5-flash-lite" → "gemini-lite", "deepseek-ai/DeepSeek-V3-0324" → "deepseek-v3"
 make_alias() {
   local id="$1"
-  # take part after / if present
   local base="${id##*/}"
-  # lowercase, keep alphanumeric and hyphens, collapse
   base=$(echo "$base" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-  # shorten common patterns
   base=$(echo "$base" | sed 's/instruct.*//;s/-fp[0-9]*//;s/-0[0-9]*$//;s/-large-v3-turbo//' | sed 's/-$//')
   echo "$base"
 }
 
 LLM_ALIAS=$(make_alias "$LLM_MODEL")
 
-# ── Apply config ──────────────────────────────────────────────────────
+# ── Apply config (deep merge via node) ───────────────────────────────
 echo ""
-echo "==> Adding IoTeX provider (model: $LLM_MODEL)..."
+echo "==> Updating openclaw.json..."
 
-DEFAULT_MODEL_PATCH=""
-if [ "$SET_DEFAULT" = true ]; then
-  DEFAULT_MODEL_PATCH=', "model": { "primary": "iotex/'"$LLM_MODEL"'" }'
-fi
+node -e '
+const fs = require("fs");
+const configPath = process.argv[1];
+const apiKey     = process.argv[2];
+const llmModel   = process.argv[3];
+const llmAlias   = process.argv[4];
+const audioModel = process.argv[5];
+const setDefault = process.argv[6] === "true";
 
-openclaw config patch "$(cat <<EOF
-{
-  "models": {
-    "providers": {
-      "iotex": {
-        "baseUrl": "https://gateway.iotex.ai/v1",
-        "apiKey": "$API_KEY",
-        "api": "openai-completions",
-        "models": [
-          {
-            "id": "$LLM_MODEL",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 200000,
-            "maxTokens": 8192
-          }
-        ]
-      }
+const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+// 1. Add iotex provider (preserves other providers)
+config.models = config.models || {};
+config.models.providers = config.models.providers || {};
+config.models.providers.iotex = {
+  baseUrl: "https://gateway.iotex.ai/v1",
+  apiKey: apiKey,
+  api: "openai-completions",
+  models: [
+    {
+      id: llmModel,
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 8192
     }
-  },
-  "agents": {
-    "defaults": {
-      "models": {
-        "iotex/$LLM_MODEL": { "alias": "$LLM_ALIAS" }
-      }
-      $DEFAULT_MODEL_PATCH
-    }
-  },
-  "auth": {
-    "profiles": {
-      "iotex:default": { "provider": "iotex", "mode": "api_key" }
-    }
-  },
-  "tools": {
-    "media": {
-      "audio": {
-        "enabled": true,
-        "models": [
-          {
-            "provider": "openai",
-            "model": "$AUDIO_MODEL",
-            "baseUrl": "https://gateway.iotex.ai/v1",
-            "profile": "iotex:default",
-            "type": "provider"
-          }
-        ]
-      }
-    }
-  }
+  ]
+};
+
+// 2. Add model alias (preserves other aliases)
+config.agents = config.agents || {};
+config.agents.defaults = config.agents.defaults || {};
+config.agents.defaults.models = config.agents.defaults.models || {};
+config.agents.defaults.models["iotex/" + llmModel] = { alias: llmAlias };
+
+// 3. Set as default model (only if requested)
+if (setDefault) {
+  config.agents.defaults.model = config.agents.defaults.model || {};
+  config.agents.defaults.model.primary = "iotex/" + llmModel;
 }
-EOF
-)"
 
+// 4. Add auth profile (preserves other profiles)
+config.auth = config.auth || {};
+config.auth.profiles = config.auth.profiles || {};
+config.auth.profiles["iotex:default"] = { provider: "iotex", mode: "api_key" };
+
+// 5. Add audio model (append if not already present, preserve existing)
+config.tools = config.tools || {};
+config.tools.media = config.tools.media || {};
+config.tools.media.audio = config.tools.media.audio || {};
+config.tools.media.audio.enabled = true;
+config.tools.media.audio.models = config.tools.media.audio.models || [];
+
+const iotexAudio = {
+  provider: "openai",
+  model: audioModel,
+  baseUrl: "https://gateway.iotex.ai/v1",
+  profile: "iotex:default",
+  type: "provider"
+};
+
+// Replace existing iotex audio entry or append
+const idx = config.tools.media.audio.models.findIndex(
+  m => m.baseUrl === "https://gateway.iotex.ai/v1" || m.profile === "iotex:default"
+);
+if (idx >= 0) {
+  config.tools.media.audio.models[idx] = iotexAudio;
+} else {
+  config.tools.media.audio.models.push(iotexAudio);
+}
+
+fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+' "$CONFIG" "$API_KEY" "$LLM_MODEL" "$LLM_ALIAS" "$AUDIO_MODEL" "$SET_DEFAULT"
+
+# ── Set up auth profile credentials ─────────────────────────────────
 echo "==> Setting up auth profile..."
 AGENT_DIR="$OPENCLAW_DIR/agents/main/agent"
 mkdir -p "$AGENT_DIR"
 AUTH_FILE="$AGENT_DIR/auth-profiles.json"
 
-node -e "
-const fs = require('fs');
+node -e '
+const fs = require("fs");
 const file = process.argv[1];
 const key  = process.argv[2];
 let store = { version: 1, profiles: {} };
-try { store = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch {}
+try { store = JSON.parse(fs.readFileSync(file, "utf-8")); } catch {}
 store.profiles = store.profiles || {};
-store.profiles['iotex:default'] = { type: 'api_key', provider: 'iotex', key };
-fs.writeFileSync(file, JSON.stringify(store, null, 2) + '\n');
-" "$AUTH_FILE" "$API_KEY"
+store.profiles["iotex:default"] = { type: "api_key", provider: "iotex", key };
+fs.writeFileSync(file, JSON.stringify(store, null, 2) + "\n");
+' "$AUTH_FILE" "$API_KEY"
 
+# ── Restart ──────────────────────────────────────────────────────────
 echo "==> Restarting gateway..."
 openclaw gateway restart 2>/dev/null || true
 sleep 3
@@ -254,7 +273,7 @@ if [ "$SET_DEFAULT" = true ]; then
 else
   echo ""
   echo "  To set as default model:"
-  echo "    openclaw config patch '{\"agents\":{\"defaults\":{\"model\":{\"primary\":\"iotex/$LLM_MODEL\"}}}}'"
+  echo "    openclaw config set agents.defaults.model.primary 'iotex/$LLM_MODEL'"
 fi
 echo ""
 echo "  Switch models in chat:  /model $LLM_ALIAS"
