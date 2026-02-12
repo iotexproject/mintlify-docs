@@ -1,0 +1,162 @@
+---
+title: "OpenClaw"
+description: "Build powerful AI agents using OpenClaw with IoTeX AI Gateway"
+---
+
+[OpenClaw](https://openclaw.ai) is an open-source AI agent framework for building autonomous AI assistants. Connect it to IoTeX AI Gateway to access all supported models through a unified interface.
+
+
+## Switching to IoTeX AI Gateway?
+
+If you already have OpenClaw running with a different model provider, just ask the agent:
+
+```
+Add gateway.iotex.ai as an OpenAI-compatible LLM provider and set
+gemini-2.5-flash-lite as my default model. 
+Docs: https://docs.iotex.ai/. 
+API key is sk-xxxxxxxxxx
+```
+
+The agent will pick up and start from there. 
+
+## New to OpenClaw?
+
+<Steps>
+  <Step title="Install OpenClaw">
+    ```bash
+    npm install -g openclaw
+    ```
+  </Step>
+
+  <Step title="Configure IoTeX AI Gateway">
+    ```bash
+    openclaw config edit
+    ```
+
+    Add the following to your `models` section:
+
+    ```json
+    {
+      "models": {
+        "providers": [
+          {
+            "id": "iotex",
+            "name": "IoTeX AI Gateway",
+            "baseURL": "https://gateway.iotex.ai/v1",
+            "apiKeyEnv": "IOTEX_API_KEY",
+            "type": "openai-compatible"
+          }
+        ],
+        "aliases": {
+          "gemini-flash": "iotex/gemini-2.5-flash",
+          "deepseek": "iotex/deepseek-chat",
+          "qwen": "iotex/qwen-2.5-14b-instruct"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Set Your API Key">
+    Get your API key from the [Gateway Console](https://gateway.iotex.ai/console/token):
+
+    ```bash
+    export IOTEX_API_KEY="sk-xxxxxxxxxx"
+    ```
+  </Step>
+
+  <Step title="Start Chatting">
+    ```bash
+    # Use a specific IoTeX model
+    openclaw chat --model iotex/gemini-2.5-flash "Explain React hooks"
+
+    # Use an alias
+    openclaw chat --model deepseek "Write a quicksort in Python"
+
+    # Interactive session with model switching
+    openclaw chat -i
+    ```
+  </Step>
+</Steps>
+
+## Advanced Configuration
+
+### Route Tasks to Different Models
+
+```javascript
+// In your OpenClaw agent configuration
+{
+  "thinking": {
+    "default": "iotex/deepseek-reasoner",
+    "fast": "iotex/gemini-2.5-flash"
+  },
+  "vision": "iotex/gemini-2.0-flash-exp",
+  "coding": "iotex/qwen-coder-turbo"
+}
+```
+
+### Programmatic Usage (Node.js)
+
+```javascript
+import { OpenClaw } from 'openclaw';
+
+const agent = new OpenClaw({
+  model: 'iotex/gemini-2.5-flash',
+  apiKey: process.env.IOTEX_API_KEY,
+  baseURL: 'https://gateway.iotex.ai/v1'
+});
+
+const response = await agent.chat('Explain neural networks');
+console.log(response);
+
+// Streaming
+await agent.chat('Write a story about AI', {
+  stream: true,
+  onChunk: (chunk) => process.stdout.write(chunk)
+});
+```
+
+## Model Selection Guide
+
+| Task | Recommended Model | Alias |
+|------|------------------|-------|
+| Quick Q&A | `gemini-2.5-flash` | `gemini-flash` |
+| Complex reasoning | `deepseek-reasoner` | `deepseek` |
+| Chinese conversations | `qwen-2.5-14b-instruct` | `qwen` |
+| Code generation | `qwen-coder-turbo` | - |
+| Vision tasks | `gemini-2.0-flash-exp` | - |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="API key not found error">
+    Make sure your API key is set correctly:
+
+    ```bash
+    echo $IOTEX_API_KEY
+
+    # If empty, set it
+    export IOTEX_API_KEY="sk-xxxxxxxxxx"
+    ```
+  </Accordion>
+
+  <Accordion title="Model not available">
+    Verify the model name matches the [supported models](/supported-models) list:
+
+    ```bash
+    openclaw models list
+    openclaw chat --model iotex/gemini-2.5-flash "Hello"
+    ```
+  </Accordion>
+
+  <Accordion title="Rate limiting">
+    OpenClaw automatically retries with exponential backoff. For high-volume usage, consider using faster models for simple tasks or upgrading your IoTeX plan.
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+- [Supported models](/supported-models)
+- [OpenClaw documentation](https://docs.openclaw.ai)
+- [OpenClaw community](https://discord.com/invite/clawd)
+- [Example agents on ClawHub](https://clawhub.com)

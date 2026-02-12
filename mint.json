@@ -44,6 +44,12 @@
       ]
     },
     {
+      "group": "AI Agents",
+      "pages": [
+        "openclaw"
+      ]
+    },
+    {
       "group": "Code Examples",
       "pages": [
         "code-examples/javascript-nodejs",
