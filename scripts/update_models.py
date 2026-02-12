@@ -7,7 +7,7 @@ from pathlib import Path
 
 MODELS_URL = "https://gateway.iotex.ai/v1/models"
 PRICING_URL = "https://gateway.iotex.ai/api/pricing"
-OUTPUT = Path(__file__).resolve().parent.parent / "overview" / "supported-ai-models.mdx"
+OUTPUT = Path(__file__).resolve().parent.parent / "supported-models.mdx"
 
 # Ratio 1.0 = $2/M tokens (standard one-api base unit)
 BASE_UNIT = 2.0

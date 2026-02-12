@@ -29,16 +29,10 @@
     {
       "group": "Overview",
       "pages": [
-        "overview/what-is-iotex-ai-gateway",
-        "overview/why-choose-iotex-ai-gateway",
-        "overview/supported-ai-models"
-      ]
-    },
-    {
-      "group": "Quick Start",
-      "pages": [
-        "quick-start/get-started-in-3-steps",
-        "quick-start/next-steps"
+        "intro",
+        "get-started",
+        "why-choose",
+        "supported-models"
       ]
     },
     {
