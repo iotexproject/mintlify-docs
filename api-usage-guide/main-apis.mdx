@@ -41,7 +41,6 @@ Interact with AI models for single-turn and multi-turn conversations.
   "temperature": 0.7
 }
 ```
-
 **Response Format**:
 
 ```json
@@ -68,7 +67,119 @@ Interact with AI models for single-turn and multi-turn conversations.
 }
 ```
 
-## 2. List Available Models
+**Text + Image -> Image Request Example**:
+
+```bash
+curl -N -X POST "https://gateway.iotex.ai/v1/chat/completions" \
+  -H "Authorization: Bearer YOU_KAPI_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3-pro-image-preview",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "Change this picture to watercolor style and only output the picture" },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,<Your input image base64>"
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 1024
+  }'
+```
+
+**Image -> Text Request Example**:
+
+```bash
+curl -N -X POST "https://gateway.iotex.ai/v1/chat/completions" \
+  -H "Authorization: Bearer YOU_KAPI_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "What is in this image?" },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 300
+  }'
+```
+
+## 2. Image Generations
+
+Generate images from text prompts.
+
+**Endpoint**: `POST /v1/images/generations`
+
+**Request Example**:
+
+```bash
+curl -X POST "https://gateway.iotex.ai/v1/images/generations" \
+  -H "Authorization: Bearer YOU_KAPI_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3-pro-image-preview",
+    "prompt": "A cyberpunk cat in a neon-lit street",
+    "n": 1,
+    "size": "1024x1024"
+  }'
+```
+
+**Response Example**:
+
+```json
+{
+  "created": 1677858242,
+  "data": [
+    {
+      "url": "https://..."
+    }
+  ]
+}
+```
+
+## 3. Audio Transcriptions
+
+Transcribe audio into the input language.
+
+**Endpoint**: `POST /v1/audio/transcriptions`
+
+**Request Example**:
+
+```bash
+curl -X POST "https://gateway.iotex.ai/v1/audio/transcriptions" \
+  -H "Authorization: Bearer YOU_KAPI_KEY" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@example.m4a" \
+  -F "model=openai/whisper-large-v3" \
+  -F "language=zh" \
+  -F "prompt=This is a Chinese conversation with complete punctuation."
+```
+
+**Response Example**:
+
+```json
+{
+  "text": "Transcription content..."
+}
+```
+
+## 4. List Available Models
 
 View the list of currently available AI models.
 
